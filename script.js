@@ -1,354 +1,227 @@
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+const ADMIN_PASSWORD = "owner123";
+const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwKhHaGMCn8wuGC-rqCOpyRiwu0_Yom0Ow7dfPM25jQ_veOyTrDrxlzBbnujO2KINgo/exec";
+
+let currentTenant = null;
+let allTenants = [];
+
+async function loadTenants() {
+  try {
+    const response = await fetch(SCRIPT_URL);
+    const result = await response.json();
+    if (result.success) {
+      allTenants = result.tenants;
+      return allTenants;
+    }
+  } catch (error) {
+    console.error("Error loading tenants:", error);
+    alert("Error connecting to Google Sheets. Check console.");
+  }
+  return [];
 }
 
-body {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  min-height: 100vh;
-  padding: 20px;
+async function saveTenant(action, data) {
+  try {
+    const response = await fetch(SCRIPT_URL + '?action=' + action, {
+      method: 'POST',
+      body: JSON.stringify(data)
+    });
+    const result = await response.json();
+    return result;
+  } catch (error) {
+    console.error("Error saving to Google Sheets:", error);
+    alert("Error saving data. Check console.");
+    return {success: false};
+  }
 }
 
-.container {
-  max-width: 1200px;
-  margin: 0 auto;
-  background: white;
-  border-radius: 12px;
-  padding: 30px;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+function adminLogin() {
+  const password = document.getElementById("adminPassword").value;
+  if (password === ADMIN_PASSWORD) {
+    showSection("adminSection");
+    loadAdminDashboard();
+  } else {
+    alert("Incorrect password!");
+  }
 }
 
-.hidden {
-  display: none !important;
+function showTenantView() {
+  showSection("tenantSection");
 }
 
-.login-box {
-  max-width: 400px;
-  margin: 40px auto;
-  text-align: center;
+function backToHome() {
+  showSection("loginSection");
+  document.getElementById("qrSection").classList.add("hidden");
+  document.getElementById("tenantFlatNumber").value = "";
+  document.getElementById("transactionId").value = "";
 }
 
-.login-box h2 {
-  margin-bottom: 20px;
-  color: #333;
+function logout() {
+  showSection("loginSection");
+  document.getElementById("adminPassword").value = "";
 }
 
-.login-box input {
-  width: 100%;
-  padding: 12px;
-  margin: 10px 0;
-  border: 2px solid #ddd;
-  border-radius: 6px;
-  font-size: 16px;
+function showSection(sectionId) {
+  document.getElementById("loginSection").classList.add("hidden");
+  document.getElementById("adminSection").classList.add("hidden");
+  document.getElementById("tenantSection").classList.add("hidden");
+  document.getElementById(sectionId).classList.remove("hidden");
 }
 
-.login-box button {
-  width: 100%;
-  padding: 12px;
-  background: #667eea;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 16px;
-  cursor: pointer;
-  margin-top: 10px;
+async function addTenant() {
+  const flatNumber = document.getElementById("flatNumber").value.trim();
+  const tenantName = document.getElementById("tenantName").value.trim();
+  const monthlyAmount = document.getElementById("monthlyAmount").value;
+
+  if (!flatNumber || !tenantName || !monthlyAmount) {
+    alert("Please fill all fields!");
+    return;
+  }
+
+  const result = await saveTenant('addTenant', {
+    flatNumber,
+    tenantName,
+    monthlyAmount: parseFloat(monthlyAmount)
+  });
+
+  if (result.success) {
+    loadAdminDashboard();
+    document.getElementById("flatNumber").value = "";
+    document.getElementById("tenantName").value = "";
+    document.getElementById("monthlyAmount").value = "";
+  } else {
+    alert(result.error || "Error adding tenant!");
+  }
 }
 
-.login-box button:hover {
-  background: #5568d3;
+async function loadAdminDashboard() {
+  const tenants = await loadTenants();
+  
+  document.getElementById("totalTenants").textContent = tenants.length;
+  document.getElementById("paidCount").textContent = tenants.filter(t => t.isPaid).length;
+  document.getElementById("unpaidCount").textContent = tenants.filter(t => !t.isPaid).length;
+  
+  const totalCollected = tenants
+    .filter(t => t.isPaid)
+    .reduce((sum, t) => sum + t.monthlyAmount, 0);
+  document.getElementById("totalCollected").textContent = `₹${totalCollected}`;
+  
+  const tbody = document.getElementById("tenantTableBody");
+  tbody.innerHTML = "";
+  
+  tenants.forEach(tenant => {
+    const row = document.createElement("tr");
+    row.innerHTML = `
+      <td><strong>${tenant.flatNumber}</strong></td>
+      <td>${tenant.tenantName}</td>
+      <td>₹${tenant.monthlyAmount}</td>
+      <td>
+        <span class="status-badge ${tenant.isPaid ? 'status-paid' : 'status-unpaid'}">
+          ${tenant.isPaid ? '✓ Paid' : '✗ Unpaid'}
+        </span>
+      </td>
+      <td>${tenant.lastPayment || 'Never'}</td>
+      <td>
+        ${!tenant.isPaid ? 
+          `<button class="action-btn mark-paid" onclick="markAsPaid('${tenant.flatNumber}')">Mark Paid</button>` : 
+          `<button class="action-btn mark-paid" onclick="markAsUnpaid('${tenant.flatNumber}')">Mark Unpaid</button>`
+        }
+        <button class="action-btn delete-btn" onclick="deleteTenant('${tenant.flatNumber}')">Delete</button>
+      </td>
+    `;
+    tbody.appendChild(row);
+  });
 }
 
-.tenant-btn {
-  text-align: center;
-  margin-top: 30px;
+async function markAsPaid(flatNumber) {
+  const result = await saveTenant('updateTenant', {
+    flatNumber,
+    isPaid: true,
+    lastPayment: new Date().toLocaleDateString('en-IN'),
+    transactionId: "Manual-" + Date.now()
+  });
+  
+  if (result.success) {
+    loadAdminDashboard();
+  }
 }
 
-.tenant-btn button {
-  padding: 14px 30px;
-  background: #10b981;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 16px;
-  cursor: pointer;
+async function markAsUnpaid(flatNumber) {
+  const result = await saveTenant('updateTenant', {
+    flatNumber,
+    isPaid: false,
+    lastPayment: '',
+    transactionId: ''
+  });
+  
+  if (result.success) {
+    loadAdminDashboard();
+  }
 }
 
-.tenant-btn button:hover {
-  background: #059669;
+async function deleteTenant(flatNumber) {
+  if (confirm(`Delete tenant in flat ${flatNumber}?`)) {
+    const result = await saveTenant('deleteTenant', {flatNumber});
+    
+    if (result.success) {
+      loadAdminDashboard();
+    }
+  }
 }
 
-.header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 30px;
-  padding-bottom: 20px;
-  border-bottom: 2px solid #e5e7eb;
-}
-
-.header h1 {
-  color: #1f2937;
-  font-size: 1.8rem;
-}
-
-.header button {
-  padding: 10px 20px;
-  background: #ef4444;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.header button:hover {
-  background: #dc2626;
-}
-
-.add-tenant {
-  background: #f3f4f6;
-  padding: 20px;
-  border-radius: 8px;
-  margin-bottom: 30px;
-}
-
-.add-tenant h3 {
-  margin-bottom: 15px;
-  color: #374151;
-}
-
-.add-tenant input {
-  width: calc(25% - 10px);
-  padding: 10px;
-  margin-right: 10px;
-  border: 2px solid #d1d5db;
-  border-radius: 6px;
-  font-size: 14px;
-}
-
-.add-tenant button {
-  padding: 10px 24px;
-  background: #8b5cf6;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-.add-tenant button:hover {
-  background: #7c3aed;
-}
-
-.summary {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
-}
-
-.stat {
-  background: #f9fafb;
-  padding: 20px;
-  border-radius: 8px;
-  text-align: center;
-  border: 2px solid #e5e7eb;
-}
-
-.stat.paid {
-  background: #d1fae5;
-  border-color: #10b981;
-}
-
-.stat.unpaid {
-  background: #fee2e2;
-  border-color: #ef4444;
-}
-
-.stat h3 {
-  color: #6b7280;
-  font-size: 0.9rem;
-  margin-bottom: 8px;
-}
-
-.stat p {
-  font-size: 2rem;
-  font-weight: bold;
-  color: #1f2937;
-}
-
-.tenant-list h3 {
-  margin-bottom: 15px;
-  color: #374151;
-}
-
-table {
-  width: 100%;
-  border-collapse: collapse;
-  background: white;
-}
-
-thead {
-  background: #667eea;
-  color: white;
-}
-
-th, td {
-  padding: 12px;
-  text-align: left;
-  border-bottom: 1px solid #e5e7eb;
-}
-
-tbody tr:hover {
-  background: #f9fafb;
-}
-
-.status-badge {
-  padding: 6px 12px;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 600;
-}
-
-.status-paid {
-  background: #d1fae5;
-  color: #065f46;
-}
-
-.status-unpaid {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.action-btn {
-  padding: 6px 12px;
-  margin: 0 4px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.85rem;
-}
-
-.mark-paid {
-  background: #10b981;
-  color: white;
-}
-
-.mark-paid:hover {
-  background: #059669;
-}
-
-.delete-btn {
-  background: #ef4444;
-  color: white;
-}
-
-.delete-btn:hover {
-  background: #dc2626;
-}
-
-.payment-form {
-  max-width: 400px;
-  margin: 40px auto;
-  text-align: center;
-}
-
-.payment-form h3 {
-  margin-bottom: 20px;
-  color: #333;
-}
-
-.payment-form input {
-  width: 100%;
-  padding: 12px;
-  margin: 10px 0;
-  border: 2px solid #ddd;
-  border-radius: 6px;
-  font-size: 16px;
-}
-
-.payment-form button {
-  width: 100%;
-  padding: 12px;
-  background: #10b981;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 16px;
-  cursor: pointer;
-  margin-top: 10px;
-}
-
-.payment-form button:hover {
-  background: #059669;
-}
-
-.qr-section {
-  max-width: 500px;
-  margin: 40px auto;
-  text-align: center;
-}
-
-.qr-section h3 {
-  margin-bottom: 10px;
-  color: #1f2937;
-}
-
-.qr-code {
-  margin: 30px 0;
-  padding: 20px;
-  background: #f9fafb;
-  border-radius: 8px;
-}
-
-.qr-code img {
-  max-width: 250px;
-  border: 4px solid #667eea;
-  border-radius: 8px;
-}
-
-.qr-section input {
-  width: 100%;
-  padding: 12px;
-  margin: 20px 0 10px;
-  border: 2px solid #ddd;
-  border-radius: 6px;
-  font-size: 16px;
-}
-
-.qr-section button {
-  width: 100%;
-  padding: 12px;
-  background: #8b5cf6;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 16px;
-  cursor: pointer;
-}
-
-.qr-section button:hover {
-  background: #7c3aed;
-}
-
-.info {
-  margin-top: 15px;
-  color: #6b7280;
-  font-size: 0.9rem;
-}
-
-@media (max-width: 768px) {
-  .add-tenant input {
-    width: 100%;
-    margin-bottom: 10px;
+async function showPaymentQR() {
+  const flatNumber = document.getElementById("tenantFlatNumber").value.trim();
+  
+  if (!flatNumber) {
+    alert("Please enter your flat number!");
+    return;
   }
   
-  table {
-    font-size: 0.85rem;
+  const tenants = await loadTenants();
+  const tenant = tenants.find(t => t.flatNumber === flatNumber);
+  
+  if (!tenant) {
+    alert("Flat number not found! Please check with the owner.");
+    return;
   }
   
-  th, td {
-    padding: 8px;
+  if (tenant.isPaid) {
+    alert("You have already paid this month!");
+    return;
+  }
+  
+  currentTenant = tenant;
+  
+  document.getElementById("paymentAmount").textContent = tenant.monthlyAmount;
+  document.getElementById("paymentFlat").textContent = tenant.flatNumber;
+  document.getElementById("paymentName").textContent = tenant.tenantName;
+  
+  const qrImage = document.getElementById("qrImage");
+  qrImage.src = `https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi://pay?pa=yourname@upi&pn=ApartmentMaintenance&am=${tenant.monthlyAmount}&cu=INR&tn=Flat${tenant.flatNumber}Maintenance`;
+  
+  document.getElementById("qrSection").classList.remove("hidden");
+}
+
+async function confirmPayment() {
+  const transactionId = document.getElementById("transactionId").value.trim();
+  
+  if (!transactionId) {
+    alert("Please enter transaction ID!");
+    return;
+  }
+  
+  const result = await saveTenant('updateTenant', {
+    flatNumber: currentTenant.flatNumber,
+    isPaid: true,
+    lastPayment: new Date().toLocaleDateString('en-IN'),
+    transactionId: transactionId
+  });
+  
+  if (result.success) {
+    alert("Payment confirmed! Thank you.");
+    backToHome();
   }
 }
+
+document.addEventListener("DOMContentLoaded", () => {
+  console.log("Apartment Tracker with Google Sheets loaded");
+});
