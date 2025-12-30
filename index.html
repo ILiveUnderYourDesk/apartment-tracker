@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apartment Maintenance Tracker</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="loginSection" class="container">
+    <h1>🏢 Apartment Maintenance Portal</h1>
+    <div class="login-box">
+      <h2>Owner Login</h2>
+      <input type="password" id="adminPassword" placeholder="Enter owner password">
+      <button onclick="adminLogin()">Login as Owner</button>
+      <p class="info">Default password: <strong>owner123</strong></p>
+    </div>
+    <div class="tenant-btn">
+      <button onclick="showTenantView()">Tenant Payment Portal →</button>
+    </div>
+  </div>
+
+  <div id="adminSection" class="container hidden">
+    <div class="header">
+      <h1>🏢 Maintenance Tracker - Owner Dashboard</h1>
+      <button onclick="logout()">Logout</button>
+    </div>
+
+    <div class="add-tenant">
+      <h3>Add New Tenant</h3>
+      <input type="text" id="flatNumber" placeholder="Flat Number (e.g., 101)">
+      <input type="text" id="tenantName" placeholder="Tenant Name">
+      <input type="number" id="monthlyAmount" placeholder="Monthly Amount (₹)">
+      <button onclick="addTenant()">Add Tenant</button>
+    </div>
+
+    <div class="summary">
+      <div class="stat">
+        <h3>Total Tenants</h3>
+        <p id="totalTenants">0</p>
+      </div>
+      <div class="stat paid">
+        <h3>Paid This Month</h3>
+        <p id="paidCount">0</p>
+      </div>
+      <div class="stat unpaid">
+        <h3>Unpaid This Month</h3>
+        <p id="unpaidCount">0</p>
+      </div>
+      <div class="stat">
+        <h3>Total Collected</h3>
+        <p id="totalCollected">₹0</p>
+      </div>
+    </div>
+
+    <div class="tenant-list">
+      <h3>Tenant Payment Status</h3>
+      <table id="tenantTable">
+        <thead>
+          <tr>
+            <th>Flat</th>
+            <th>Tenant Name</th>
+            <th>Amount</th>
+            <th>Status</th>
+            <th>Last Payment</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="tenantTableBody">
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tenantSection" class="container hidden">
+    <div class="header">
+      <h1>💳 Pay Your Maintenance</h1>
+      <button onclick="backToHome()">← Back</button>
+    </div>
+
+    <div class="payment-form">
+      <h3>Enter Your Details</h3>
+      <input type="text" id="tenantFlatNumber" placeholder="Your Flat Number">
+      <button onclick="showPaymentQR()">Proceed to Pay</button>
+    </div>
+
+    <div id="qrSection" class="qr-section hidden">
+      <h3>Scan to Pay ₹<span id="paymentAmount">0</span></h3>
+      <p><strong>Flat:</strong> <span id="paymentFlat"></span> | <strong>Name:</strong> <span id="paymentName"></span></p>
+      <div class="qr-code">
+        <img id="qrImage" src="https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=upi://pay?pa=yourname@upi&pn=ApartmentMaintenance&am=2000&cu=INR" alt="Payment QR Code">
+      </div>
+      <p class="info">After payment, confirm below:</p>
+      <input type="text" id="transactionId" placeholder="Enter Transaction ID">
+      <button onclick="confirmPayment()">Confirm Payment</button>
+    </div>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
